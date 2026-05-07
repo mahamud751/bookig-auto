@@ -153,9 +153,9 @@ Size (optional):`
 
   return (
     <main className="app-shell px-4 py-8 sm:px-6">
-      <div className="mx-auto grid w-full max-w-7xl gap-6 lg:grid-cols-[240px_1fr]">
-        <aside className={`${mobileSidebarOpen ? "block" : "hidden"} rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:block`}>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700">F-Commerce Toolkit</p>
+      <div className="mx-auto grid w-full max-w-[1320px] gap-6 lg:grid-cols-[260px_1fr]">
+        <aside className={`${mobileSidebarOpen ? "block" : "hidden"} soft-panel p-4 lg:block`}>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">F-Commerce Toolkit</p>
           <p className="mt-2 text-lg font-bold text-slate-900">Seller Panel</p>
           <nav className="mt-5 space-y-2">
             <NavItem
@@ -194,21 +194,28 @@ Size (optional):`
               }}
             />
           </nav>
-          <button onClick={logout} className="mt-6 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+          <button onClick={logout} className="mt-6 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-white">
             Logout
           </button>
         </aside>
 
         <div className="flex flex-col gap-6">
-          <header className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <header className="soft-panel p-6">
             <button
-              className="mb-3 rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-600 lg:hidden"
+              className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs font-medium text-slate-600 lg:hidden"
               onClick={() => setMobileSidebarOpen((p) => !p)}
             >
               {mobileSidebarOpen ? "Close Menu" : "Open Menu"}
             </button>
-            <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">Seller Dashboard</h1>
-            <p className="mt-1 text-sm text-slate-500">Classic and clear workspace for daily operations.</p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">Seller Dashboard</h1>
+                <p className="mt-1 text-sm text-slate-500">Track orders, customers, and replies in one premium workspace.</p>
+              </div>
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                Today
+              </span>
+            </div>
           </header>
 
           {loading ? (
@@ -225,7 +232,7 @@ Size (optional):`
           {(activeSection === "overview" || activeSection === "products" || activeSection === "orders" || activeSection === "replies") && (
           <section className="grid gap-4 xl:grid-cols-3">
             {(activeSection === "overview" || activeSection === "products") && (
-            <form onSubmit={createProduct} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <form onSubmit={createProduct} className="soft-panel p-5">
               <h2 className="text-base font-semibold text-slate-900">Add Product</h2>
               <p className="mb-4 mt-1 text-xs text-slate-500">Add product and stock details.</p>
               <div className="space-y-3">
@@ -239,7 +246,7 @@ Size (optional):`
             )}
 
             {(activeSection === "overview" || activeSection === "orders") && (
-            <form onSubmit={createOrder} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <form onSubmit={createOrder} className="soft-panel p-5">
               <h2 className="text-base font-semibold text-slate-900">Add Order</h2>
               <p className="mb-4 mt-1 text-xs text-slate-500">Capture customer order from chat.</p>
               <div className="space-y-3">
@@ -258,7 +265,7 @@ Size (optional):`
                   onChange={(e) => setPastedOrderText(e.target.value)}
                 />
                 <button
-                  className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-white"
                   type="button"
                   onClick={autofillFromPastedText}
                 >
@@ -270,7 +277,7 @@ Size (optional):`
             )}
 
             {(activeSection === "overview" || activeSection === "replies") && (
-            <form onSubmit={createReply} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <form onSubmit={createReply} className="soft-panel p-5">
               <h2 className="text-base font-semibold text-slate-900">Add Quick Reply</h2>
               <p className="mb-4 mt-1 text-xs text-slate-500">Save reusable message templates.</p>
               <div className="space-y-3">
@@ -284,7 +291,7 @@ Size (optional):`
           )}
 
           {(activeSection === "overview" || activeSection === "products" || activeSection === "replies") && (
-            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <section className="soft-panel p-5">
               <h2 className="text-base font-semibold text-slate-900">Messenger Reply Helper (Product Price)</h2>
               <p className="mt-1 text-xs text-slate-500">
                 Search product, auto-generate message, then copy and paste in Messenger.
@@ -316,7 +323,7 @@ Size (optional):`
                     onChange={(e) => setDeliveryCharge(e.target.value)}
                   />
                   <button
-                    className="w-full rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-white"
                     disabled={!selectedProduct}
                     onClick={() => {
                       if (!selectedProduct) return;
@@ -342,7 +349,7 @@ Size (optional):`
                   />
                   <div className="mt-3 flex justify-end">
                     <button
-                      className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 disabled:opacity-40"
+                      className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-40"
                       onClick={() => navigator.clipboard.writeText(generatedReply)}
                       disabled={!generatedReply}
                       type="button"
@@ -357,7 +364,7 @@ Size (optional):`
 
           {(activeSection === "overview" || activeSection === "products" || activeSection === "orders") && (
           <section className="grid gap-4 xl:grid-cols-2">
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="soft-panel p-5">
               <h2 className="mb-4 text-base font-semibold text-slate-900">Products</h2>
               {loading ? (
                 <ListSkeleton />
@@ -366,12 +373,12 @@ Size (optional):`
                   <div className="space-y-2">
                     {paginatedProducts.items.length === 0 ? <Empty text="No products added yet." /> : null}
                     {paginatedProducts.items.map((p) => (
-                      <div key={p.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                      <div key={p.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2 text-sm">
                         <div>
                           <p className="font-medium text-slate-800">{p.name}</p>
                           <p className="text-xs text-slate-500">Code: {p.sku || "-"} | Stock: {p.stock}</p>
                         </div>
-                        <span className="rounded-md bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-700">{p.price} BDT</span>
+                        <span className="rounded-lg bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">{p.price} BDT</span>
                       </div>
                     ))}
                   </div>
@@ -380,7 +387,7 @@ Size (optional):`
               )}
             </div>
 
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="soft-panel p-5">
               <h2 className="mb-4 text-base font-semibold text-slate-900">Recent Orders</h2>
               {loading ? (
                 <ListSkeleton />
@@ -389,7 +396,7 @@ Size (optional):`
                   <div className="space-y-2">
                     {paginatedOrders.items.length === 0 ? <Empty text="No orders yet." /> : null}
                     {paginatedOrders.items.map((o) => (
-                      <div key={o.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                      <div key={o.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2 text-sm">
                         <div>
                           <p className="font-medium text-slate-800">{o.customerName}</p>
                           <p className="text-xs text-slate-500">
@@ -400,7 +407,7 @@ Size (optional):`
                         </div>
                         <div className="text-right">
                           <p className="text-xs text-slate-500">{o.price} BDT</p>
-                          <p className="text-xs font-semibold text-blue-700">{o.status}</p>
+                          <p className="text-xs font-semibold text-emerald-700">{o.status}</p>
                         </div>
                       </div>
                     ))}
@@ -413,7 +420,7 @@ Size (optional):`
           )}
 
           {(activeSection === "overview" || activeSection === "replies") && (
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="soft-panel p-5">
             <h2 className="mb-4 text-base font-semibold text-slate-900">Quick Replies</h2>
             {loading ? (
               <ListSkeleton />
@@ -422,13 +429,13 @@ Size (optional):`
                 <div className="space-y-3">
                   {paginatedReplies.items.length === 0 ? <Empty text="No quick replies yet." /> : null}
                   {paginatedReplies.items.map((reply, idx) => (
-                    <div key={reply.id} className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                    <div key={reply.id} className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
                       <div>
                         <p className="font-medium text-slate-800">{reply.title}</p>
                         <p className="text-sm text-slate-600">{reply.message}</p>
                       </div>
                       <button
-                        className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                        className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
                         onClick={() => copyTemplate(reply.message, idx)}
                       >
                         {copiedIndex === idx ? "Copied" : "Copy"}
@@ -448,10 +455,10 @@ Size (optional):`
 }
 
 const inputClass =
-  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-200";
+  "w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-100";
 
 const buttonClass =
-  "rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800";
+  "rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500";
 
 function Empty({ text }: { text: string }) {
   return <p className="rounded-lg border border-dashed border-slate-300 px-3 py-4 text-center text-sm text-slate-500">{text}</p>;
@@ -473,8 +480,8 @@ function NavItem({
       onClick={onClick}
       className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm font-medium transition ${
         active
-          ? "border-blue-200 bg-blue-50 text-blue-700"
-          : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+          : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-white"
       }`}
     >
       <span>{label}</span>
@@ -497,13 +504,13 @@ function Pagination({
   if (totalPages <= 1) return null;
   return (
     <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-      <button className="rounded border border-slate-300 px-2 py-1 disabled:opacity-40" onClick={() => onPageChange(page - 1)} disabled={page <= 1}>
+      <button className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 disabled:opacity-40" onClick={() => onPageChange(page - 1)} disabled={page <= 1}>
         Prev
       </button>
       <span>
         Page {page} of {totalPages}
       </span>
-      <button className="rounded border border-slate-300 px-2 py-1 disabled:opacity-40" onClick={() => onPageChange(page + 1)} disabled={page >= totalPages}>
+      <button className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 disabled:opacity-40" onClick={() => onPageChange(page + 1)} disabled={page >= totalPages}>
         Next
       </button>
     </div>
@@ -533,8 +540,11 @@ function StatsSkeleton() {
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <p className="text-xs uppercase tracking-wider text-slate-500">{label}</p>
+    <div className="soft-panel p-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs uppercase tracking-wider text-slate-500">{label}</p>
+        <span className="h-8 w-8 rounded-full bg-emerald-100" />
+      </div>
       <p className="mt-2 text-3xl font-bold text-slate-900">{value}</p>
     </div>
   );

@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f8fafc;
-  --foreground: #0f172a;
+  --background: #f3f7f5;
+  --foreground: #0b1f17;
   --surface: #ffffff;
 }
 
@@ -33,7 +33,16 @@ body {
 .app-shell {
   min-height: 100vh;
   background:
-    radial-gradient(circle at top right, rgba(59, 130, 246, 0.12), transparent 42%),
-    radial-gradient(circle at top left, rgba(14, 165, 233, 0.1), transparent 35%),
+    radial-gradient(circle at top right, rgba(34, 197, 94, 0.16), transparent 42%),
+    radial-gradient(circle at top left, rgba(16, 185, 129, 0.12), transparent 35%),
     var(--background);
+}
+
+.soft-panel {
+  border: 1px solid #d9ede2;
+  border-radius: 1rem;
+  background: #ffffff;
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.05),
+    0 12px 30px rgba(16, 24, 40, 0.08);
 }

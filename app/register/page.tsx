@@ -35,8 +35,8 @@ export default function RegisterPage() {
 
   return (
     <main className="app-shell flex min-h-screen items-center justify-center px-6 py-10">
-      <div className="w-full max-w-lg rounded-2xl border border-slate-200 bg-white p-7 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-700">F-Commerce</p>
+      <div className="soft-panel w-full max-w-lg p-7">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-700">F-Commerce</p>
         <h1 className="mt-2 text-2xl font-bold text-slate-900">Create Seller Account</h1>
         <p className="mt-1 text-sm text-slate-500">Start managing your Facebook orders with a clean workflow.</p>
         <form onSubmit={onSubmit} className="mt-6 grid gap-4">
@@ -46,13 +46,13 @@ export default function RegisterPage() {
           <input className={inputClass} placeholder="Email (optional)" value={form.email} onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))} />
           <input className={inputClass} placeholder="Password" type="password" value={form.password} onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))} />
           {error ? <p className="text-sm text-red-600">{error}</p> : null}
-          <button disabled={loading} className="rounded-lg bg-slate-900 px-4 py-2 font-semibold text-white transition hover:bg-slate-800 disabled:opacity-60">
+          <button disabled={loading} className="rounded-xl bg-emerald-600 px-4 py-2 font-semibold text-white shadow-sm transition hover:bg-emerald-500 disabled:opacity-60">
             {loading ? "Please wait..." : "Create account"}
           </button>
         </form>
         <p className="mt-4 text-sm text-slate-600">
           Already have account?{" "}
-          <Link href="/login" className="font-semibold text-blue-600">Login</Link>
+          <Link href="/login" className="font-semibold text-emerald-600">Login</Link>
         </p>
       </div>
     </main>
@@ -60,4 +60,4 @@ export default function RegisterPage() {
 }
 
 const inputClass =
-  "rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-200";
+  "rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-slate-800 outline-none transition focus:border-emerald-400 focus:bg-white focus:ring-2 focus:ring-emerald-100";
