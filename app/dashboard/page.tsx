@@ -281,15 +281,23 @@ export default function DashboardPage() {
   }
 
   function onProductFilesChange(files: FileList | null) {
-    if (!files) return;
+    if (!files?.length) return;
     try {
       const list = Array.from(files);
       validateImageFiles(list);
-      setNewProduct((p) => ({ ...p, imageFiles: list }));
+      setNewProduct((p) => ({ ...p, imageFiles: [...p.imageFiles, ...list] }));
       setFormError("");
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Invalid file");
     }
+  }
+
+  function removeExistingImage(src: string) {
+    setNewProduct((p) => ({ ...p, existingImages: p.existingImages.filter((img) => img !== src) }));
+  }
+
+  function removeNewImage(index: number) {
+    setNewProduct((p) => ({ ...p, imageFiles: p.imageFiles.filter((_, i) => i !== index) }));
   }
 
   return (
@@ -601,8 +609,12 @@ export default function DashboardPage() {
               <label className="block text-xs font-medium text-slate-600">
                 Product photos (max 5MB each)
                 <input className={`${inputClass} mt-1`} type="file" accept="image/*" multiple onChange={(e) => onProductFilesChange(e.target.files)} />
-                {newProduct.imageFiles.length > 0 ? <p className="mt-1 text-xs text-slate-500">{newProduct.imageFiles.length} new file(s)</p> : null}
-                {newProduct.existingImages.length > 0 ? <p className="mt-1 text-xs text-slate-500">{newProduct.existingImages.length} existing image(s) kept</p> : null}
+                <ProductFormPhotos
+                  existingImages={newProduct.existingImages}
+                  newFiles={newProduct.imageFiles}
+                  onRemoveExisting={removeExistingImage}
+                  onRemoveNew={removeNewImage}
+                />
               </label>
               {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
               <button className={`${buttonClass} w-full`} disabled={uploadingImages}>{uploadingImages ? "Saving..." : "Save Product"}</button>
@@ -649,6 +661,80 @@ const buttonClass =
 function formatOptions(values: string[] | undefined, fallback: string[]) {
   const list = values?.length ? values : fallback;
   return list.join(", ");
+}
+
+function ProductFormPhotos({
+  existingImages,
+  newFiles,
+  onRemoveExisting,
+  onRemoveNew,
+}: {
+  existingImages: string[];
+  newFiles: File[];
+  onRemoveExisting: (src: string) => void;
+  onRemoveNew: (index: number) => void;
+}) {
+  const newPreviews = useMemo(() => newFiles.map((file) => URL.createObjectURL(file)), [newFiles]);
+
+  useEffect(() => {
+    return () => newPreviews.forEach((url) => URL.revokeObjectURL(url));
+  }, [newPreviews]);
+
+  if (existingImages.length === 0 && newFiles.length === 0) return null;
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {existingImages.map((src) => (
+        <EditablePhotoThumb
+          key={src}
+          src={assetUrl(src)}
+          label="Remove saved photo"
+          onRemove={() => onRemoveExisting(src)}
+        />
+      ))}
+      {newPreviews.map((preview, index) => (
+        <EditablePhotoThumb
+          key={`${newFiles[index]?.name}-${index}`}
+          src={preview}
+          label="Remove new photo"
+          badge="New"
+          onRemove={() => onRemoveNew(index)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function EditablePhotoThumb({
+  src,
+  label,
+  badge,
+  onRemove,
+}: {
+  src: string;
+  label: string;
+  badge?: string;
+  onRemove: () => void;
+}) {
+  const isBlob = src.startsWith("blob:");
+  return (
+    <div className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-100 shadow-sm">
+      <Image src={src} alt="" fill className="object-cover" sizes="80px" unoptimized={isBlob} />
+      {badge ? (
+        <span className="absolute left-1 top-1 rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+          {badge}
+        </span>
+      ) : null}
+      <button
+        type="button"
+        aria-label={label}
+        className="absolute right-1 top-1 flex h-6 w-6 items-center justify-center rounded-full bg-black/60 text-sm font-bold text-white transition hover:bg-red-600"
+        onClick={onRemove}
+      >
+        ×
+      </button>
+    </div>
+  );
 }
 
 function StatusPill({ active }: { active: boolean }) {
