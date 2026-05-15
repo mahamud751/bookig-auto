@@ -1,27 +1,67 @@
 "use client";
 
+import Image from "next/image";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiRequest } from "@/lib/api";
+import { Modal } from "@/components/dashboard/Modal";
+import { OptionPicker } from "@/components/dashboard/OptionPicker";
+import { apiRequest, fetchMyBusiness, uploadProductImages } from "@/lib/api";
 import { clearToken, getToken } from "@/lib/auth";
+import { assetUrl, siteUrl } from "@/lib/images";
+import { validateImageFiles } from "@/lib/upload";
 
 type DashboardStats = { todayOrders: number; pending: number; delivered: number; cancelled: number };
-type Product = { id: string; name: string; sku?: string | null; price: string; stock: number };
-type Order = { id: string; customerName: string; productName: string; productCode?: string | null; color?: string | null; size?: string | null; status: string; price: string };
+type Product = {
+  id: string;
+  name: string;
+  sku?: string | null;
+  imageUrl?: string | null;
+  images?: string[];
+  price: string;
+  stock: number;
+  colors?: string[];
+  sizes?: string[];
+  isActive?: boolean;
+};
+type Order = {
+  id: string;
+  customerName: string;
+  customerPhone: string;
+  address: string;
+  productName: string;
+  productCode?: string | null;
+  color?: string | null;
+  size?: string | null;
+  quantity?: number;
+  paymentMethod?: string | null;
+  paymentNumber?: string | null;
+  status: string;
+  price: string;
+};
 type QuickReply = { id: string; title: string; message: string };
 type SectionKey = "overview" | "products" | "orders" | "replies";
 
-const PAGE_SIZE = 5;
+const TABLE_PAGE_SIZE = 10;
+const REPLY_PAGE_SIZE = 5;
+const DEFAULT_PRODUCT_COLORS = ["Black", "White", "Red", "Blue"];
+const DEFAULT_PRODUCT_SIZES = ["S", "M", "L", "XL", "XXL"];
 
-export default function DashboardPage() {
-  const router = useRouter();
-  const [token, setTokenState] = useState<string | null>(null);
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [replies, setReplies] = useState<QuickReply[]>([]);
-  const [newProduct, setNewProduct] = useState({ name: "", sku: "", price: "", stock: "0" });
-  const [newOrder, setNewOrder] = useState({
+function defaultProductForm() {
+  return {
+    name: "",
+    sku: "",
+    price: "",
+    stock: "0",
+    colors: [...DEFAULT_PRODUCT_COLORS],
+    sizes: [...DEFAULT_PRODUCT_SIZES],
+    imageFiles: [] as File[],
+    existingImages: [] as string[],
+    isActive: true,
+  };
+}
+
+function defaultOrderForm() {
+  return {
     customerName: "",
     customerPhone: "",
     address: "",
@@ -30,7 +70,19 @@ export default function DashboardPage() {
     color: "",
     size: "",
     price: "",
-  });
+    status: "PENDING",
+  };
+}
+
+export default function DashboardPage() {
+  const router = useRouter();
+  const [token, setTokenState] = useState<string | null>(null);
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [replies, setReplies] = useState<QuickReply[]>([]);
+  const [newProduct, setNewProduct] = useState(defaultProductForm);
+  const [orderForm, setOrderForm] = useState(defaultOrderForm);
   const [newReply, setNewReply] = useState({ title: "", message: "" });
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,10 +91,14 @@ export default function DashboardPage() {
   const [orderPage, setOrderPage] = useState(1);
   const [replyPage, setReplyPage] = useState(1);
   const [activeSection, setActiveSection] = useState<SectionKey>("overview");
-  const [productSearch, setProductSearch] = useState("");
-  const [selectedProductId, setSelectedProductId] = useState("");
-  const [deliveryCharge, setDeliveryCharge] = useState("80");
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [productModal, setProductModal] = useState<"add" | "edit" | null>(null);
+  const [orderModal, setOrderModal] = useState<"add" | "edit" | null>(null);
   const [pastedOrderText, setPastedOrderText] = useState("");
+  const [storeSlug, setStoreSlug] = useState("");
+  const [uploadingImages, setUploadingImages] = useState(false);
+  const [formError, setFormError] = useState("");
 
   useEffect(() => {
     const t = getToken();
@@ -55,16 +111,18 @@ export default function DashboardPage() {
 
   async function loadAll(t: string) {
     setLoading(true);
-    const [statsRes, productsRes, ordersRes, repliesRes] = await Promise.all([
+    const [statsRes, productsRes, ordersRes, repliesRes, businessRes] = await Promise.all([
       apiRequest<DashboardStats>("/orders/dashboard", { token: t }),
       apiRequest<Product[]>("/products", { token: t }),
       apiRequest<Order[]>("/orders", { token: t }),
       apiRequest<QuickReply[]>("/quick-replies", { token: t }),
+      fetchMyBusiness(t),
     ]);
     setStats(statsRes);
     setProducts(productsRes);
     setOrders(ordersRes);
     setReplies(repliesRes);
+    setStoreSlug(businessRes.slug);
     setLoading(false);
   }
 
@@ -82,30 +140,119 @@ export default function DashboardPage() {
     setTimeout(() => setCopiedIndex(null), 1200);
   };
 
-  async function createProduct(e: FormEvent) {
+  async function saveProduct(e: FormEvent) {
     e.preventDefault();
     if (!token) return;
-    await apiRequest("/products", { method: "POST", token, body: JSON.stringify({ ...newProduct, price: Number(newProduct.price), stock: Number(newProduct.stock) }) });
-    setNewProduct({ name: "", sku: "", price: "", stock: "0" });
+    setFormError("");
+    setUploadingImages(true);
+    try {
+      validateImageFiles(newProduct.imageFiles);
+      let uploadedImages: string[] = [];
+      if (newProduct.imageFiles.length > 0) {
+        const uploaded = await uploadProductImages(token, newProduct.imageFiles);
+        uploadedImages = uploaded.images;
+      }
+      const images = [...newProduct.existingImages, ...uploadedImages];
+      const payload = {
+        name: newProduct.name,
+        sku: newProduct.sku || undefined,
+        price: Number(newProduct.price),
+        stock: Number(newProduct.stock),
+        colors: newProduct.colors,
+        sizes: newProduct.sizes,
+        images,
+        imageUrl: images[0],
+        isActive: newProduct.isActive,
+      };
+      if (productModal === "edit" && selectedProductId) {
+        await apiRequest(`/products/${selectedProductId}`, { method: "PATCH", token, body: JSON.stringify(payload) });
+      } else {
+        await apiRequest("/products", { method: "POST", token, body: JSON.stringify(payload) });
+      }
+      setProductModal(null);
+      setNewProduct(defaultProductForm());
+      await loadAll(token);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Failed to save product");
+    } finally {
+      setUploadingImages(false);
+    }
+  }
+
+  async function deleteProduct(id: string) {
+    if (!token || !confirm("Delete this product?")) return;
+    await apiRequest(`/products/${id}`, { method: "DELETE", token });
+    setSelectedProductId(null);
     await loadAll(token);
   }
 
-  async function createOrder(e: FormEvent) {
+  async function toggleProductStatus(product: Product) {
+    if (!token) return;
+    await apiRequest(`/products/${product.id}`, {
+      method: "PATCH",
+      token,
+      body: JSON.stringify({ isActive: !product.isActive }),
+    });
+    await loadAll(token);
+  }
+
+  function openEditProduct(product: Product) {
+    setNewProduct({
+      name: product.name,
+      sku: product.sku ?? "",
+      price: String(product.price),
+      stock: String(product.stock),
+      colors: product.colors ?? [...DEFAULT_PRODUCT_COLORS],
+      sizes: product.sizes ?? [...DEFAULT_PRODUCT_SIZES],
+      imageFiles: [],
+      existingImages: product.images?.length ? product.images : product.imageUrl ? [product.imageUrl] : [],
+      isActive: product.isActive ?? true,
+    });
+    setSelectedProductId(product.id);
+    setProductModal("edit");
+  }
+
+  async function saveOrder(e: FormEvent) {
     e.preventDefault();
     if (!token) return;
-    await apiRequest("/orders", { method: "POST", token, body: JSON.stringify({ ...newOrder, price: Number(newOrder.price) }) });
-    setNewOrder({
-      customerName: "",
-      customerPhone: "",
-      address: "",
-      productName: "",
-      productCode: "",
-      color: "",
-      size: "",
-      price: "",
-    });
-    setPastedOrderText("");
+    setFormError("");
+    const payload = { ...orderForm, price: Number(orderForm.price) };
+    try {
+      if (orderModal === "edit" && selectedOrderId) {
+        await apiRequest(`/orders/${selectedOrderId}`, { method: "PATCH", token, body: JSON.stringify(payload) });
+      } else {
+        await apiRequest("/orders", { method: "POST", token, body: JSON.stringify(payload) });
+      }
+      setOrderModal(null);
+      setOrderForm(defaultOrderForm());
+      setPastedOrderText("");
+      await loadAll(token);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Failed to save order");
+    }
+  }
+
+  async function deleteOrder(id: string) {
+    if (!token || !confirm("Delete this order?")) return;
+    await apiRequest(`/orders/${id}`, { method: "DELETE", token });
+    setSelectedOrderId(null);
     await loadAll(token);
+  }
+
+  function openEditOrder(order: Order) {
+    setOrderForm({
+      customerName: order.customerName,
+      customerPhone: order.customerPhone,
+      address: order.address,
+      productName: order.productName,
+      productCode: order.productCode ?? "",
+      color: order.color ?? "",
+      size: order.size ?? "",
+      price: String(order.price),
+      status: order.status,
+    });
+    setSelectedOrderId(order.id);
+    setOrderModal("edit");
   }
 
   async function createReply(e: FormEvent) {
@@ -121,34 +268,28 @@ export default function DashboardPage() {
     router.push("/login");
   }
 
-  const paginatedProducts = paginate(products, productPage, PAGE_SIZE);
-  const paginatedOrders = paginate(orders, orderPage, PAGE_SIZE);
-  const paginatedReplies = paginate(replies, replyPage, PAGE_SIZE);
-  const filteredProducts = useMemo(() => {
-    const q = productSearch.trim().toLowerCase();
-    if (!q) return products.slice(0, 30);
-    return products
-      .filter((p) => p.name.toLowerCase().includes(q) || (p.sku ?? "").toLowerCase().includes(q))
-      .slice(0, 30);
-  }, [products, productSearch]);
-  const selectedProduct = products.find((p) => p.id === selectedProductId);
-  const generatedReply = selectedProduct
-    ? `${selectedProduct.name}${selectedProduct.sku ? ` (Code: ${selectedProduct.sku})` : ""}
-Price: ${selectedProduct.price} BDT
-Delivery: ${deliveryCharge || "80"} BDT
-
-Order করতে:
-Name:
-Phone:
-Address:
-Color (optional):
-Size (optional):`
-    : "";
+  const paginatedProducts = paginate(products, productPage, TABLE_PAGE_SIZE);
+  const paginatedOrders = paginate(orders, orderPage, TABLE_PAGE_SIZE);
+  const paginatedReplies = paginate(replies, replyPage, REPLY_PAGE_SIZE);
+  const selectedProduct = products.find((p) => p.id === selectedProductId) ?? null;
+  const selectedOrder = orders.find((o) => o.id === selectedOrderId) ?? null;
 
   function autofillFromPastedText() {
     if (!pastedOrderText.trim()) return;
     const parsed = parseMessengerOrderText(pastedOrderText);
-    setNewOrder((p) => ({ ...p, ...parsed }));
+    setOrderForm((p) => ({ ...p, ...parsed }));
+  }
+
+  function onProductFilesChange(files: FileList | null) {
+    if (!files) return;
+    try {
+      const list = Array.from(files);
+      validateImageFiles(list);
+      setNewProduct((p) => ({ ...p, imageFiles: list }));
+      setFormError("");
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : "Invalid file");
+    }
   }
 
   return (
@@ -172,6 +313,7 @@ Size (optional):`
               active={activeSection === "products"}
               onClick={() => {
                 setActiveSection("products");
+                setSelectedProductId(null);
                 setMobileSidebarOpen(false);
               }}
             />
@@ -181,6 +323,7 @@ Size (optional):`
               active={activeSection === "orders"}
               onClick={() => {
                 setActiveSection("orders");
+                setSelectedOrderId(null);
                 setMobileSidebarOpen(false);
               }}
             />
@@ -194,7 +337,17 @@ Size (optional):`
               }}
             />
           </nav>
-          <button onClick={logout} className="mt-6 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-white">
+          {storeSlug ? (
+            <a
+              href={siteUrl(`/store/${storeSlug}/products`)}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-4 block rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-xs font-semibold text-emerald-700 hover:bg-emerald-100"
+            >
+              Open my store
+            </a>
+          ) : null}
+          <button onClick={logout} className="mt-4 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 hover:bg-white">
             Logout
           </button>
         </aside>
@@ -229,225 +382,258 @@ Size (optional):`
             </section>
           )}
 
-          {(activeSection === "overview" || activeSection === "products" || activeSection === "orders" || activeSection === "replies") && (
-          <section className="grid gap-4 xl:grid-cols-3">
-            {(activeSection === "overview" || activeSection === "products") && (
-            <form onSubmit={createProduct} className="soft-panel p-5">
-              <h2 className="text-base font-semibold text-slate-900">Add Product</h2>
-              <p className="mb-4 mt-1 text-xs text-slate-500">Add product and stock details.</p>
-              <div className="space-y-3">
-                <input className={inputClass} placeholder="Product name" value={newProduct.name} onChange={(e) => setNewProduct((p) => ({ ...p, name: e.target.value }))} />
-                <input className={inputClass} placeholder="Product code (SKU)" value={newProduct.sku} onChange={(e) => setNewProduct((p) => ({ ...p, sku: e.target.value }))} />
-                <input className={inputClass} placeholder="Price (BDT)" value={newProduct.price} onChange={(e) => setNewProduct((p) => ({ ...p, price: e.target.value }))} />
-                <input className={inputClass} placeholder="Stock qty" value={newProduct.stock} onChange={(e) => setNewProduct((p) => ({ ...p, stock: e.target.value }))} />
-                <button className={buttonClass}>Save Product</button>
-              </div>
-            </form>
-            )}
 
-            {(activeSection === "overview" || activeSection === "orders") && (
-            <form onSubmit={createOrder} className="soft-panel p-5">
-              <h2 className="text-base font-semibold text-slate-900">Add Order</h2>
-              <p className="mb-4 mt-1 text-xs text-slate-500">Capture customer order from chat.</p>
-              <div className="space-y-3">
-                <input className={inputClass} placeholder="Customer name" value={newOrder.customerName} onChange={(e) => setNewOrder((p) => ({ ...p, customerName: e.target.value }))} />
-                <input className={inputClass} placeholder="Customer phone" value={newOrder.customerPhone} onChange={(e) => setNewOrder((p) => ({ ...p, customerPhone: e.target.value }))} />
-                <input className={inputClass} placeholder="Delivery address" value={newOrder.address} onChange={(e) => setNewOrder((p) => ({ ...p, address: e.target.value }))} />
-                <input className={inputClass} placeholder="Product name" value={newOrder.productName} onChange={(e) => setNewOrder((p) => ({ ...p, productName: e.target.value }))} />
-                <input className={inputClass} placeholder="Product code (optional)" value={newOrder.productCode} onChange={(e) => setNewOrder((p) => ({ ...p, productCode: e.target.value }))} />
-                <input className={inputClass} placeholder="Color (optional)" value={newOrder.color} onChange={(e) => setNewOrder((p) => ({ ...p, color: e.target.value }))} />
-                <input className={inputClass} placeholder="Size (optional)" value={newOrder.size} onChange={(e) => setNewOrder((p) => ({ ...p, size: e.target.value }))} />
-                <input className={inputClass} placeholder="Price (BDT)" value={newOrder.price} onChange={(e) => setNewOrder((p) => ({ ...p, price: e.target.value }))} />
-                <textarea
-                  className={`${inputClass} min-h-24`}
-                  placeholder="Paste customer message (Name/Phone/Address/Color/Size)..."
-                  value={pastedOrderText}
-                  onChange={(e) => setPastedOrderText(e.target.value)}
-                />
-                <button
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-white"
-                  type="button"
-                  onClick={autofillFromPastedText}
-                >
-                  Autofill from pasted text
-                </button>
-                <button className={buttonClass}>Save Order</button>
-              </div>
-            </form>
-            )}
-
-            {(activeSection === "overview" || activeSection === "replies") && (
-            <form onSubmit={createReply} className="soft-panel p-5">
-              <h2 className="text-base font-semibold text-slate-900">Add Quick Reply</h2>
-              <p className="mb-4 mt-1 text-xs text-slate-500">Save reusable message templates.</p>
-              <div className="space-y-3">
-                <input className={inputClass} placeholder="Template title" value={newReply.title} onChange={(e) => setNewReply((p) => ({ ...p, title: e.target.value }))} />
-                <textarea className={`${inputClass} min-h-28`} placeholder="Message template..." value={newReply.message} onChange={(e) => setNewReply((p) => ({ ...p, message: e.target.value }))} />
-                <button className={buttonClass}>Save Reply</button>
-              </div>
-            </form>
-            )}
-          </section>
-          )}
-
-          {(activeSection === "overview" || activeSection === "products" || activeSection === "replies") && (
-            <section className="soft-panel p-5">
-              <h2 className="text-base font-semibold text-slate-900">Messenger Reply Helper (Product Price)</h2>
-              <p className="mt-1 text-xs text-slate-500">
-                Search product, auto-generate message, then copy and paste in Messenger.
-              </p>
-              <div className="mt-4 grid gap-4 xl:grid-cols-3">
-                <div className="space-y-3 xl:col-span-1">
-                  <input
-                    className={inputClass}
-                    placeholder="Search product (e.g. polo)"
-                    value={productSearch}
-                    onChange={(e) => setProductSearch(e.target.value)}
-                  />
-                  <select
-                    className={inputClass}
-                    value={selectedProductId}
-                    onChange={(e) => setSelectedProductId(e.target.value)}
-                  >
-                    <option value="">Select product</option>
-                    {filteredProducts.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} {p.sku ? `(${p.sku})` : ""} - {p.price} BDT
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    className={inputClass}
-                    placeholder="Delivery charge"
-                    value={deliveryCharge}
-                    onChange={(e) => setDeliveryCharge(e.target.value)}
-                  />
-                  <button
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-white"
-                    disabled={!selectedProduct}
-                    onClick={() => {
-                      if (!selectedProduct) return;
-                      setNewOrder((p) => ({
-                        ...p,
-                        productName: selectedProduct.name,
-                        productCode: selectedProduct.sku ?? "",
-                        price: String(selectedProduct.price),
-                      }));
-                    }}
-                    type="button"
-                  >
-                    Use in Add Order form
-                  </button>
-                </div>
-                <div className="xl:col-span-2">
-                  <textarea
-                    className={`${inputClass} min-h-44`}
-                    value={generatedReply}
-                    onChange={() => {}}
-                    placeholder="Generated message will appear here..."
-                    readOnly
-                  />
-                  <div className="mt-3 flex justify-end">
-                    <button
-                      className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-40"
-                      onClick={() => navigator.clipboard.writeText(generatedReply)}
-                      disabled={!generatedReply}
-                      type="button"
-                    >
-                      Copy Generated Reply
-                    </button>
-                  </div>
-                </div>
-              </div>
+          {activeSection === "overview" && (
+            <section className="soft-panel p-6 text-sm text-slate-600">
+              Welcome to your seller workspace. Open <strong>Products</strong> or <strong>Orders</strong> from the sidebar to manage everything.
             </section>
           )}
 
-          {(activeSection === "overview" || activeSection === "products" || activeSection === "orders") && (
-          <section className="grid gap-4 xl:grid-cols-2">
-            <div className="soft-panel p-5">
-              <h2 className="mb-4 text-base font-semibold text-slate-900">Products</h2>
-              {loading ? (
-                <ListSkeleton />
-              ) : (
+          {activeSection === "products" && (
+            <section className="soft-panel p-5">
+              {!selectedProduct ? (
                 <>
-                  <div className="space-y-2">
-                    {paginatedProducts.items.length === 0 ? <Empty text="No products added yet." /> : null}
-                    {paginatedProducts.items.map((p) => (
-                      <div key={p.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2 text-sm">
-                        <div>
-                          <p className="font-medium text-slate-800">{p.name}</p>
-                          <p className="text-xs text-slate-500">Code: {p.sku || "-"} | Stock: {p.stock}</p>
-                        </div>
-                        <span className="rounded-lg bg-emerald-100 px-2 py-1 text-xs font-semibold text-emerald-700">{p.price} BDT</span>
-                      </div>
-                    ))}
-                  </div>
-                  <Pagination page={productPage} totalPages={paginatedProducts.totalPages} onPageChange={setProductPage} />
-                </>
-              )}
-            </div>
-
-            <div className="soft-panel p-5">
-              <h2 className="mb-4 text-base font-semibold text-slate-900">Recent Orders</h2>
-              {loading ? (
-                <ListSkeleton />
-              ) : (
-                <>
-                  <div className="space-y-2">
-                    {paginatedOrders.items.length === 0 ? <Empty text="No orders yet." /> : null}
-                    {paginatedOrders.items.map((o) => (
-                      <div key={o.id} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/80 px-3 py-2 text-sm">
-                        <div>
-                          <p className="font-medium text-slate-800">{o.customerName}</p>
-                          <p className="text-xs text-slate-500">
-                            {o.productName}
-                            {o.productCode ? ` (${o.productCode})` : ""}
-                            {(o.color || o.size) ? ` | ${o.color || "-"} / ${o.size || "-"}` : ""}
-                          </p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs text-slate-500">{o.price} BDT</p>
-                          <p className="text-xs font-semibold text-emerald-700">{o.status}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <Pagination page={orderPage} totalPages={paginatedOrders.totalPages} onPageChange={setOrderPage} />
-                </>
-              )}
-            </div>
-          </section>
-          )}
-
-          {(activeSection === "overview" || activeSection === "replies") && (
-          <section className="soft-panel p-5">
-            <h2 className="mb-4 text-base font-semibold text-slate-900">Quick Replies</h2>
-            {loading ? (
-              <ListSkeleton />
-            ) : (
-              <>
-                <div className="space-y-3">
-                  {paginatedReplies.items.length === 0 ? <Empty text="No quick replies yet." /> : null}
-                  {paginatedReplies.items.map((reply, idx) => (
-                    <div key={reply.id} className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
-                      <div>
-                        <p className="font-medium text-slate-800">{reply.title}</p>
-                        <p className="text-sm text-slate-600">{reply.message}</p>
-                      </div>
-                      <button
-                        className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
-                        onClick={() => copyTemplate(reply.message, idx)}
-                      >
-                        {copiedIndex === idx ? "Copied" : "Copy"}
-                      </button>
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-lg font-semibold text-slate-900">Products</h2>
+                      <p className="text-xs text-slate-500">Only active products show in your public store.</p>
                     </div>
-                  ))}
-                </div>
-                <Pagination page={replyPage} totalPages={paginatedReplies.totalPages} onPageChange={setReplyPage} />
-              </>
-            )}
-          </section>
+                    <button
+                      type="button"
+                      className={buttonClass}
+                      onClick={() => {
+                        setNewProduct(defaultProductForm());
+                        setProductModal("add");
+                        setFormError("");
+                      }}
+                    >
+                      + Add Product
+                    </button>
+                  </div>
+                  {loading ? (
+                    <ListSkeleton />
+                  ) : (
+                    <>
+                      <div className="overflow-x-auto rounded-xl border border-slate-200">
+                        <table className="w-full min-w-[640px] text-left text-sm">
+                          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                            <tr>
+                              <th className="px-3 py-2">Name</th>
+                              <th className="px-3 py-2">Code</th>
+                              <th className="px-3 py-2">Price</th>
+                              <th className="px-3 py-2">Stock</th>
+                              <th className="px-3 py-2">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {paginatedProducts.items.length === 0 ? (
+                              <tr>
+                                <td colSpan={5} className="px-3 py-6 text-center text-slate-500">
+                                  No products yet.
+                                </td>
+                              </tr>
+                            ) : (
+                              paginatedProducts.items.map((p) => (
+                                <tr
+                                  key={p.id}
+                                  className="cursor-pointer border-t border-slate-100 hover:bg-emerald-50/40"
+                                  onClick={() => setSelectedProductId(p.id)}
+                                >
+                                  <td className="px-3 py-2 font-medium text-slate-800">{p.name}</td>
+                                  <td className="px-3 py-2 text-slate-600">{p.sku || "-"}</td>
+                                  <td className="px-3 py-2">{p.price} BDT</td>
+                                  <td className="px-3 py-2">{p.stock}</td>
+                                  <td className="px-3 py-2">
+                                    <StatusPill active={p.isActive !== false} />
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                      <Pagination page={productPage} totalPages={paginatedProducts.totalPages} onPageChange={setProductPage} />
+                    </>
+                  )}
+                </>
+              ) : (
+                <ProductDetail
+                  product={selectedProduct}
+                  onBack={() => setSelectedProductId(null)}
+                  onEdit={() => openEditProduct(selectedProduct)}
+                  onDelete={() => deleteProduct(selectedProduct.id)}
+                  onToggleStatus={() => toggleProductStatus(selectedProduct)}
+                />
+              )}
+            </section>
           )}
+
+          {activeSection === "orders" && (
+            <section className="soft-panel p-5">
+              {!selectedOrder ? (
+                <>
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-lg font-semibold text-slate-900">Orders</h2>
+                      <p className="text-xs text-slate-500">Click a row to view details.</p>
+                    </div>
+                    <button
+                      type="button"
+                      className={buttonClass}
+                      onClick={() => {
+                        setOrderForm(defaultOrderForm());
+                        setOrderModal("add");
+                        setFormError("");
+                      }}
+                    >
+                      + Add Order
+                    </button>
+                  </div>
+                  {loading ? (
+                    <ListSkeleton />
+                  ) : (
+                    <>
+                      <div className="overflow-x-auto rounded-xl border border-slate-200">
+                        <table className="w-full min-w-[720px] text-left text-sm">
+                          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
+                            <tr>
+                              <th className="px-3 py-2">Customer</th>
+                              <th className="px-3 py-2">Phone</th>
+                              <th className="px-3 py-2">Product</th>
+                              <th className="px-3 py-2">Price</th>
+                              <th className="px-3 py-2">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {paginatedOrders.items.length === 0 ? (
+                              <tr>
+                                <td colSpan={5} className="px-3 py-6 text-center text-slate-500">
+                                  No orders yet.
+                                </td>
+                              </tr>
+                            ) : (
+                              paginatedOrders.items.map((o) => (
+                                <tr
+                                  key={o.id}
+                                  className="cursor-pointer border-t border-slate-100 hover:bg-emerald-50/40"
+                                  onClick={() => setSelectedOrderId(o.id)}
+                                >
+                                  <td className="px-3 py-2 font-medium text-slate-800">{o.customerName}</td>
+                                  <td className="px-3 py-2">{o.customerPhone}</td>
+                                  <td className="px-3 py-2">{o.productName}</td>
+                                  <td className="px-3 py-2">{o.price} BDT</td>
+                                  <td className="px-3 py-2">
+                                    <OrderStatusPill status={o.status} />
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                      <Pagination page={orderPage} totalPages={paginatedOrders.totalPages} onPageChange={setOrderPage} />
+                    </>
+                  )}
+                </>
+              ) : (
+                <OrderDetail
+                  order={selectedOrder}
+                  onBack={() => setSelectedOrderId(null)}
+                  onEdit={() => openEditOrder(selectedOrder)}
+                  onDelete={() => deleteOrder(selectedOrder.id)}
+                />
+              )}
+            </section>
+          )}
+
+          {activeSection === "replies" && (
+            <section className="soft-panel p-5">
+              <h2 className="mb-4 text-base font-semibold text-slate-900">Quick Replies</h2>
+              <form onSubmit={createReply} className="mb-4 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <input className={inputClass} placeholder="Template title" value={newReply.title} onChange={(e) => setNewReply((p) => ({ ...p, title: e.target.value }))} />
+                <textarea className={`${inputClass} min-h-24`} placeholder="Message template..." value={newReply.message} onChange={(e) => setNewReply((p) => ({ ...p, message: e.target.value }))} />
+                <button className={buttonClass}>Save Reply</button>
+              </form>
+              {loading ? (
+                <ListSkeleton />
+              ) : (
+                <>
+                  <div className="space-y-3">
+                    {paginatedReplies.items.length === 0 ? <Empty text="No quick replies yet." /> : null}
+                    {paginatedReplies.items.map((reply, idx) => (
+                      <div key={reply.id} className="flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3">
+                        <div>
+                          <p className="font-medium text-slate-800">{reply.title}</p>
+                          <p className="text-sm text-slate-600">{reply.message}</p>
+                        </div>
+                        <button
+                          type="button"
+                          className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700"
+                          onClick={() => copyTemplate(reply.message, idx)}
+                        >
+                          {copiedIndex === idx ? "Copied" : "Copy"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <Pagination page={replyPage} totalPages={paginatedReplies.totalPages} onPageChange={setReplyPage} />
+                </>
+              )}
+            </section>
+          )}
+
+          <Modal
+            title={productModal === "edit" ? "Edit Product" : "Add Product"}
+            open={productModal !== null}
+            onClose={() => setProductModal(null)}
+          >
+            <form onSubmit={saveProduct} className="space-y-3">
+              <input className={inputClass} placeholder="Product name" required value={newProduct.name} onChange={(e) => setNewProduct((p) => ({ ...p, name: e.target.value }))} />
+              <input className={inputClass} placeholder="Product code (SKU)" value={newProduct.sku} onChange={(e) => setNewProduct((p) => ({ ...p, sku: e.target.value }))} />
+              <input className={inputClass} placeholder="Price (BDT)" required value={newProduct.price} onChange={(e) => setNewProduct((p) => ({ ...p, price: e.target.value }))} />
+              <input className={inputClass} placeholder="Stock qty" value={newProduct.stock} onChange={(e) => setNewProduct((p) => ({ ...p, stock: e.target.value }))} />
+              <OptionPicker label="Colors" options={DEFAULT_PRODUCT_COLORS} selected={newProduct.colors} onChange={(colors) => setNewProduct((p) => ({ ...p, colors }))} />
+              <OptionPicker label="Sizes" options={DEFAULT_PRODUCT_SIZES} selected={newProduct.sizes} onChange={(sizes) => setNewProduct((p) => ({ ...p, sizes }))} />
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input type="checkbox" checked={newProduct.isActive} onChange={(e) => setNewProduct((p) => ({ ...p, isActive: e.target.checked }))} />
+                Active in store
+              </label>
+              <label className="block text-xs font-medium text-slate-600">
+                Product photos (max 5MB each)
+                <input className={`${inputClass} mt-1`} type="file" accept="image/*" multiple onChange={(e) => onProductFilesChange(e.target.files)} />
+                {newProduct.imageFiles.length > 0 ? <p className="mt-1 text-xs text-slate-500">{newProduct.imageFiles.length} new file(s)</p> : null}
+                {newProduct.existingImages.length > 0 ? <p className="mt-1 text-xs text-slate-500">{newProduct.existingImages.length} existing image(s) kept</p> : null}
+              </label>
+              {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
+              <button className={`${buttonClass} w-full`} disabled={uploadingImages}>{uploadingImages ? "Saving..." : "Save Product"}</button>
+            </form>
+          </Modal>
+
+          <Modal title={orderModal === "edit" ? "Edit Order" : "Add Order"} open={orderModal !== null} onClose={() => setOrderModal(null)}>
+            <form onSubmit={saveOrder} className="space-y-3">
+              <input className={inputClass} placeholder="Customer name" required value={orderForm.customerName} onChange={(e) => setOrderForm((p) => ({ ...p, customerName: e.target.value }))} />
+              <input className={inputClass} placeholder="Customer phone" required value={orderForm.customerPhone} onChange={(e) => setOrderForm((p) => ({ ...p, customerPhone: e.target.value }))} />
+              <input className={inputClass} placeholder="Delivery address" required value={orderForm.address} onChange={(e) => setOrderForm((p) => ({ ...p, address: e.target.value }))} />
+              <input className={inputClass} placeholder="Product name" required value={orderForm.productName} onChange={(e) => setOrderForm((p) => ({ ...p, productName: e.target.value }))} />
+              <input className={inputClass} placeholder="Product code" value={orderForm.productCode} onChange={(e) => setOrderForm((p) => ({ ...p, productCode: e.target.value }))} />
+              <input className={inputClass} placeholder="Color" value={orderForm.color} onChange={(e) => setOrderForm((p) => ({ ...p, color: e.target.value }))} />
+              <input className={inputClass} placeholder="Size" value={orderForm.size} onChange={(e) => setOrderForm((p) => ({ ...p, size: e.target.value }))} />
+              <input className={inputClass} placeholder="Price (BDT)" required value={orderForm.price} onChange={(e) => setOrderForm((p) => ({ ...p, price: e.target.value }))} />
+              <select className={inputClass} value={orderForm.status} onChange={(e) => setOrderForm((p) => ({ ...p, status: e.target.value }))}>
+                <option value="PENDING">Pending</option>
+                <option value="DELIVERED">Delivered</option>
+                <option value="CANCELLED">Cancelled</option>
+              </select>
+              {orderModal === "add" ? (
+                <>
+                  <textarea className={`${inputClass} min-h-20`} placeholder="Paste customer message..." value={pastedOrderText} onChange={(e) => setPastedOrderText(e.target.value)} />
+                  <button type="button" className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-semibold" onClick={autofillFromPastedText}>Autofill from pasted text</button>
+                </>
+              ) : null}
+              {formError ? <p className="text-sm text-red-600">{formError}</p> : null}
+              <button className={`${buttonClass} w-full`}>Save Order</button>
+            </form>
+          </Modal>
         </div>
       </div>
     </main>
@@ -459,6 +645,134 @@ const inputClass =
 
 const buttonClass =
   "rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500";
+
+function formatOptions(values: string[] | undefined, fallback: string[]) {
+  const list = values?.length ? values : fallback;
+  return list.join(", ");
+}
+
+function StatusPill({ active }: { active: boolean }) {
+  return (
+    <span
+      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+        active ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"
+      }`}
+    >
+      {active ? "Active" : "Inactive"}
+    </span>
+  );
+}
+
+function OrderStatusPill({ status }: { status: string }) {
+  const styles =
+    status === "DELIVERED"
+      ? "bg-emerald-100 text-emerald-700"
+      : status === "CANCELLED"
+        ? "bg-red-100 text-red-700"
+        : "bg-amber-100 text-amber-800";
+  return <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${styles}`}>{status}</span>;
+}
+
+function ProductDetail({
+  product,
+  onBack,
+  onEdit,
+  onDelete,
+  onToggleStatus,
+}: {
+  product: Product;
+  onBack: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onToggleStatus: () => void;
+}) {
+  const images = product.images?.length ? product.images : product.imageUrl ? [product.imageUrl] : [];
+  return (
+    <div className="space-y-5">
+      <button type="button" onClick={onBack} className="text-sm font-semibold text-emerald-700">
+        ← Back to products
+      </button>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="flex gap-2 overflow-x-auto">
+          {images.length > 0 ? (
+            images.map((src) => (
+              <div key={src} className="relative h-32 w-32 shrink-0 overflow-hidden rounded-xl bg-slate-100">
+                <Image src={assetUrl(src)} alt={product.name} fill className="object-cover" sizes="128px" />
+              </div>
+            ))
+          ) : (
+            <div className="flex h-32 w-full items-center justify-center rounded-xl border border-dashed border-slate-300 text-sm text-slate-400">
+              No images
+            </div>
+          )}
+        </div>
+        <div className="space-y-3 text-sm">
+          <h2 className="text-xl font-bold text-slate-900">{product.name}</h2>
+          <p className="text-slate-600">Code: {product.sku || "-"}</p>
+          <p className="text-lg font-bold text-emerald-700">{product.price} BDT</p>
+          <p>Stock: {product.stock}</p>
+          <p>Colors: {formatOptions(product.colors, DEFAULT_PRODUCT_COLORS)}</p>
+          <p>Sizes: {formatOptions(product.sizes, DEFAULT_PRODUCT_SIZES)}</p>
+          <p>
+            Status: <StatusPill active={product.isActive !== false} />
+          </p>
+          <div className="flex flex-wrap gap-2 pt-2">
+            <button type="button" className={buttonClass} onClick={onEdit}>
+              Edit
+            </button>
+            <button type="button" className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold" onClick={onToggleStatus}>
+              {product.isActive !== false ? "Set Inactive" : "Set Active"}
+            </button>
+            <button type="button" className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700" onClick={onDelete}>
+              Delete
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function OrderDetail({
+  order,
+  onBack,
+  onEdit,
+  onDelete,
+}: {
+  order: Order;
+  onBack: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="space-y-4 text-sm">
+      <button type="button" onClick={onBack} className="text-sm font-semibold text-emerald-700">
+        ← Back to orders
+      </button>
+      <h2 className="text-xl font-bold text-slate-900">{order.customerName}</h2>
+      <div className="grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2">
+        <p>Phone: {order.customerPhone}</p>
+        <p>Status: <OrderStatusPill status={order.status} /></p>
+        <p className="sm:col-span-2">Address: {order.address}</p>
+        <p>Product: {order.productName}</p>
+        <p>Code: {order.productCode || "-"}</p>
+        <p>Color: {order.color || "-"}</p>
+        <p>Size: {order.size || "-"}</p>
+        <p>Qty: {order.quantity ?? 1}</p>
+        <p className="font-semibold text-emerald-700">Total: {order.price} BDT</p>
+        {order.paymentMethod ? <p>Payment: {order.paymentMethod} ({order.paymentNumber})</p> : null}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={buttonClass} onClick={onEdit}>
+          Edit
+        </button>
+        <button type="button" className="rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700" onClick={onDelete}>
+          Delete
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function Empty({ text }: { text: string }) {
   return <p className="rounded-lg border border-dashed border-slate-300 px-3 py-4 text-center text-sm text-slate-500">{text}</p>;
