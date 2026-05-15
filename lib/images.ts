@@ -7,7 +7,14 @@ export function assetUrl(path?: string | null) {
   return `${API_ORIGIN}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
+function siteBaseUrl() {
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin;
+  }
+  return process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
+}
+
 export function siteUrl(path = "") {
-  const base = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
-  return `${base.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  return `${siteBaseUrl().replace(/\/$/, "")}${normalized}`;
 }

@@ -7,7 +7,7 @@ import { Modal } from "@/components/dashboard/Modal";
 import { OptionPicker } from "@/components/dashboard/OptionPicker";
 import { apiRequest, fetchMyBusiness, uploadProductImages } from "@/lib/api";
 import { clearToken, getToken } from "@/lib/auth";
-import { assetUrl, siteUrl } from "@/lib/images";
+import { assetUrl } from "@/lib/images";
 import { validateImageFiles } from "@/lib/upload";
 
 type DashboardStats = { todayOrders: number; pending: number; delivered: number; cancelled: number };
@@ -347,7 +347,7 @@ export default function DashboardPage() {
           </nav>
           {storeSlug ? (
             <a
-              href={siteUrl(`/store/${storeSlug}/products`)}
+              href={`/store/${storeSlug}/products`}
               target="_blank"
               rel="noreferrer"
               className="mt-4 block rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-center text-xs font-semibold text-emerald-700 hover:bg-emerald-100"

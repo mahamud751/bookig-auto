@@ -35,10 +35,11 @@ export default function ProductDetailPage() {
       .finally(() => setLoading(false));
   }, [slug, productId]);
 
-  const productUrl = useMemo(
-    () => siteUrl(`/store/${slug}/products/${productId}`),
-    [slug, productId],
-  );
+  const [productUrl, setProductUrl] = useState("");
+
+  useEffect(() => {
+    setProductUrl(siteUrl(`/store/${slug}/products/${productId}`));
+  }, [slug, productId]);
 
   const copyText = useMemo(() => {
     if (!product) return "";
